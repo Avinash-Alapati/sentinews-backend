@@ -1,0 +1,8 @@
+# Gitleaks ignore entries for false positive test fixtures and placeholders
+# Format: <commit-id>:<file-path>:<rule-id> or path
+tests/unit/auth/test_security.py
+tests/unit/auth/test_auth_advanced_flows.py
+tests/api/test_websocket_security.py
+tests/api/test_production_lockdown.py
+tests/unit/core/test_production_config_validation.py
+.env.example

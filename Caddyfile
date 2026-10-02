@@ -1,0 +1,43 @@
+{
+    # Global options
+    email {$ACME_EMAIL:admin@sentinews.com}
+    admin off
+}
+
+# Public HTTP & HTTPS reverse proxy listener
+{$DOMAIN:localhost} {
+    # Limit max request body size to 5MB to prevent DoS
+    request_body {
+        max_size 5MB
+    }
+
+    # Block internal diagnostic and metrics endpoints from public access
+    @internal_blocked {
+        path /internal/*
+    }
+    respond @internal_blocked "Forbidden" 403
+
+    # Production HTTP Security Headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Reverse proxy to FastAPI application container
+    handle {
+        reverse_proxy api:8000 {
+            # Standard trusted proxy headers
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+
+            # Enable immediate streaming for WebSockets and SSE
+            flush_interval -1
+        }
+    }
+}

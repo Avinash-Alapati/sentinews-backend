@@ -1,0 +1,110 @@
+groups:
+  - name: sentinews_apm_alerts
+    rules:
+      - alert: High5xxErrorRate
+        expr: sum(rate(http_requests_total{status_class="5xx"}[5m])) / sum(rate(http_requests_total[5m])) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+          tier: api
+        annotations:
+          summary: "API 5xx error rate is elevated (> 2%)"
+          description: "5xx HTTP responses represent {{ $value | humanizePercentage }} of total API traffic over the last 5 minutes."
+          runbook_url: "docs/apm/RUNBOOK.md#high5xxerrorrate"
+
+      - alert: HighLatencyP99
+        expr: histogram_quantile(0.99, sum by(le, endpoint)(rate(http_request_duration_seconds_bucket[5m]))) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          tier: api
+        annotations:
+          summary: "P99 HTTP latency exceeds 2 seconds on {{ $labels.endpoint }}"
+          description: "Endpoint {{ $labels.endpoint }} p99 response duration is currently {{ $value | humanizeDuration }}."
+          runbook_url: "docs/apm/RUNBOOK.md#highlatencyp99"
+
+      - alert: DBPoolSaturation
+        expr: (db_pool_checked_out / (db_pool_size + db_pool_overflow)) > 0.90
+        for: 2m
+        labels:
+          severity: critical
+          tier: database
+        annotations:
+          summary: "SQLAlchemy connection pool utilization > 90%"
+          description: "Database connection pool utilization has remained at {{ $value | humanizePercentage }} for 2 minutes."
+          runbook_url: "docs/apm/RUNBOOK.md#dbpoolsaturation"
+
+      - alert: DBPoolTimeouts
+        expr: rate(db_pool_timeouts_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          tier: database
+        annotations:
+          summary: "Database connection checkout timeouts detected"
+          description: "FastAPI request threads are timing out waiting for available connections in the SQLAlchemy pool."
+          runbook_url: "docs/apm/RUNBOOK.md#dbpooltimeouts"
+
+      - alert: EventLoopLagHigh
+        expr: event_loop_lag_seconds > 0.250
+        for: 2m
+        labels:
+          severity: warning
+          tier: runtime
+        annotations:
+          summary: "Asyncio event loop lag > 250ms"
+          description: "Asyncio event loop is experiencing severe scheduling drift ({{ $value | humanizeDuration }}), indicating CPU-bound blocking tasks in async handlers."
+          runbook_url: "docs/apm/RUNBOOK.md#eventlooplaghigh"
+
+      - alert: MemoryNearLimit
+        expr: (app_memory_rss_bytes / app_memory_limit_bytes) > 0.85
+        for: 2m
+        labels:
+          severity: critical
+          tier: system
+        annotations:
+          summary: "Process memory RSS exceeds 85% of container limit"
+          description: "Process resident set size is {{ $value | humanizePercentage }} of the {{ $labels.limit }} limit (imminent Render OOM-kill risk)."
+          runbook_url: "docs/apm/RUNBOOK.md#memorynearlimit"
+
+      - alert: AppRestartDetected
+        expr: increase(app_restarts_total[15m]) > 0
+        labels:
+          severity: warning
+          tier: runtime
+        annotations:
+          summary: "Application process restart detected"
+          description: "The application has restarted {{ $value }} time(s) in the last 15 minutes."
+          runbook_url: "docs/apm/RUNBOOK.md#apprestartdetected"
+
+      - alert: UpstreamFailureHigh
+        expr: sum(rate(upstream_requests_total{outcome!="success"}[5m])) / sum(rate(upstream_requests_total[5m])) > 0.10
+        for: 3m
+        labels:
+          severity: warning
+          tier: upstream
+        annotations:
+          summary: "Outbound provider failure rate > 10%"
+          description: "Upstream requests are failing at {{ $value | humanizePercentage }} over the last 5 minutes."
+          runbook_url: "docs/apm/RUNBOOK.md#upstreamfailurehigh"
+
+      - alert: MarketDataStale
+        expr: market_data_staleness_seconds > 60
+        for: 2m
+        labels:
+          severity: warning
+          tier: domain
+        annotations:
+          summary: "Market data feed staleness > 60s"
+          description: "Provider {{ $labels.provider }} has not provided successful market data updates for {{ $value }}s."
+          runbook_url: "docs/apm/RUNBOOK.md#marketdatastale"
+
+      - alert: NewCrashSignature
+        expr: increase(crash_signature_total[5m]) > 0
+        labels:
+          severity: critical
+          tier: application
+        annotations:
+          summary: "New crash signature {{ $labels.signature_id }} detected at {{ $labels.location }}"
+          description: "Exception {{ $labels.exception_type }} raised on endpoint {{ $labels.endpoint }} (Signature: {{ $labels.signature_id }})."
+          runbook_url: "docs/apm/RUNBOOK.md#newcrashsignature"

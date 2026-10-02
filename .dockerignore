@@ -1,0 +1,36 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Git and IDE
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+.sentinews_clean_shutdown
+/tmp/*
+
+# Logs and benchmarks
+*.log
+summary_*.json
+k6_*.log
+docs/
+
+# Terraform and local infra state
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/*.tfvars

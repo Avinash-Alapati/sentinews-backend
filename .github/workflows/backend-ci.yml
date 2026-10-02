@@ -1,0 +1,117 @@
+name: Sentinews Backend CI (PostgreSQL 15 & Redis 7 Service Containers)
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test-postgres-redis:
+    name: Test Suite with Real PostgreSQL 15 & Redis 7
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: sentinews_test
+          POSTGRES_USER: sentinews
+          POSTGRES_PASSWORD: testpassword123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ENVIRONMENT: test
+      SECRET_KEY: test_super_secure_jwt_secret_key_for_testing_only_12345
+      METRICS_TOKEN: test_metrics_token_1234567890123456789
+      INTERNAL_API_SECRET: test_internal_secret_key_1234567890123456
+      DATABASE_URL: postgresql+asyncpg://sentinews:testpassword123@localhost:5432/sentinews_test
+      SYNC_DATABASE_URL: postgresql://sentinews:testpassword123@localhost:5432/sentinews_test
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_ENABLED: "true"
+      REFRESH_TOKEN_ROTATION_GRACE_SECONDS: "10"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install CPU PyTorch & Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov pip-audit
+
+      - name: Security & Vulnerability Audit (pip-audit)
+        run: |
+          pip-audit -r requirements.txt
+
+      - name: Database Migration Verification (Alembic Cycle)
+        run: |
+          echo "1. Upgrading empty PostgreSQL DB to head..."
+          alembic upgrade head
+          echo "2. Downgrading to base..."
+          alembic downgrade base
+          echo "3. Re-upgrading to head..."
+          alembic upgrade head
+
+      - name: Run Full Pytest Suite against PostgreSQL & Redis
+        run: |
+          pytest -v --cov=app --cov-report=term-missing
+
+  terraform-lint-validate:
+    name: Terraform Format, Validate & Checkov Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -recursive terraform/
+
+      - name: Terraform Validate Dev Environment
+        working-directory: ./terraform/environments/dev
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Terraform Validate Prod Environment
+        working-directory: ./terraform/environments/prod
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Run Checkov Security Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          soft_fail: true

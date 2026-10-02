@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: "Sentinews Dashboards"
+    orgId: 1
+    folder: "Sentinews"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

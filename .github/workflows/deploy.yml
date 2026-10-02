@@ -1,0 +1,172 @@
+name: Deploy to Single-Instance AWS EC2
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-and-verify:
+    name: Run Test Suite Against Containers
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sentinews
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install System and Python Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libpq-dev
+          pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run Pytest Test Suite
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/sentinews
+          SYNC_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sentinews
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test_super_secret_jwt_key_here_for_ci_pipeline_verification
+          METRICS_TOKEN: test_metrics_token_32_bytes_length_here_ok
+        run: |
+          pytest -v --tb=short
+
+  build-and-deploy:
+    name: Build Docker Image, Push to ECR & Deploy via SSM
+    needs: test-and-verify
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract Metadata & Commit SHA
+        id: meta
+        run: |
+          IMAGE_TAG="${GITHUB_SHA::8}"
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "ecr_registry=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_OUTPUT
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.ecr_registry }}/sentinews-backend-dev:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.ecr_registry }}/sentinews-backend-dev:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to EC2 via AWS SSM Run Command
+        env:
+          EC2_INSTANCE_ID: ${{ secrets.AWS_EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+          IMAGE_URI: ${{ steps.meta.outputs.ecr_registry }}/sentinews-backend-dev:${{ steps.meta.outputs.image_tag }}
+        run: |
+          echo "[INFO] Triggering zero-downtime deployment on EC2 instance ${EC2_INSTANCE_ID}..."
+          
+          COMMANDS=$(cat << 'EOF'
+          set -euo pipefail
+          cd /opt/sentinews
+          
+          # 1. Fetch latest secrets from SSM Parameter Store into chmod 600 .env
+          aws ssm get-parameters-by-path \
+            --path "/sentinews/dev" \
+            --with-decryption \
+            --query "Parameters[*].[Name,Value]" \
+            --output text | while read -r name value; do
+              key=$(basename "$name")
+              echo "${key}=${value}"
+            done > .env.tmp
+          
+          chmod 600 .env.tmp
+          mv .env.tmp .env
+          
+          # 2. Login to ECR and pull target image
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-south-1.amazonaws.com
+          
+          # 3. Run database migrations
+          docker compose --profile core run --rm migration
+          
+          # 4. Start core and edge services
+          docker compose --profile core --profile edge up -d --remove-orphans
+          
+          # 5. Health check verification with rollback
+          sleep 5
+          if curl -sf http://localhost:8000/healthz; then
+            echo "[SUCCESS] Deployment verified healthy at /healthz"
+          else
+            echo "[ERROR] Health check failed! Initiating rollback..."
+            docker compose rollback || true
+            exit 1
+          fi
+          EOF
+          )
+          
+          # Send SSM Command
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${EC2_INSTANCE_ID}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[${COMMANDS}]" \
+            --region "${AWS_REGION}" \
+            --query "Command.CommandId" \
+            --output text)
+          
+          echo "[INFO] Sent SSM command ID: ${COMMAND_ID}. Waiting for completion..."
+          aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${EC2_INSTANCE_ID}" --region "${AWS_REGION}"
+          echo "[SUCCESS] EC2 deployment finished successfully."

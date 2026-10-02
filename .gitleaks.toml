@@ -1,0 +1,26 @@
+# Gitleaks Configuration & Strict Scoped Allowlist for SentiNews Backend
+title = "SentiNews Scoped Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Strictly scoped test fixture allowlist with exact paths and regex patterns"
+paths = [
+    '''tests/unit/observability/test_logging_hygiene\.py$''',
+    '''tests/unit/core/test_production_config_validation\.py$''',
+    '''tests/unit/core/test_rate_limiting_resilience\.py$''',
+    '''\.env\.example$''',
+    '''docs/deployment-runbook\.md$'''
+]
+regexes = [
+    '''your_super_secret_jwt_key_here_change_in_production''',
+    '''sentinews_metrics_secret_token_change_in_production''',
+    '''sentinews_internal_api_secret_change_in_production''',
+    '''sentinews_metrics_secret_token''',
+    '''completely_different_key_with_length_over_32_chars''',
+    '''production_super_secure_key_1234567890123456''',
+    '''production_metrics_token_1234567890123456''',
+    '''production_internal_secret_1234567890123456''',
+    '''postgres://postgres:postgres@localhost:5432/sentinews_db'''
+]

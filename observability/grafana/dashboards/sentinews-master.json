@@ -1,0 +1,463 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": false,
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "${DS_PROMETHEUS}",
+        "enable": true,
+        "expr": "changes(app_start_time_seconds[1m]) > 0",
+        "name": "Deployments & Restarts",
+        "tagKeys": "instance",
+        "textFormat": "App restart detected on {{instance}}",
+        "titleFormat": "Restart / Deploy"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Status Strip",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "sum(rate(http_requests_total[1m])) or vector(0)", "instant": false, "refId": "A" }],
+      "title": "Throughput (RPS)",
+      "type": "stat"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1.0 }, { "color": "red", "value": 2.0 }] },
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 3, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "(sum(rate(http_requests_total{status_class=\"5xx\"}[1m])) / sum(rate(http_requests_total[1m])) * 100) or vector(0)", "instant": false, "refId": "A" }],
+      "title": "Error Rate %",
+      "type": "stat"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 2.0 }] },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 6, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by(le)(rate(http_request_duration_seconds_bucket[5m]))) or vector(0)", "instant": false, "refId": "A" }],
+      "title": "Latency (p95)",
+      "type": "stat"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 9, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "sum(http_requests_in_progress) or vector(0)", "instant": false, "refId": "A" }],
+      "title": "In-Flight Requests",
+      "type": "stat"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "red", "value": 0.25 }] },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 12, "y": 1 },
+      "id": 5,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "event_loop_lag_seconds or vector(0)", "instant": false, "refId": "A" }],
+      "title": "Event Loop Lag",
+      "type": "stat"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] },
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 15, "y": 1 },
+      "id": 6,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "(db_pool_checked_out / (db_pool_size + db_pool_overflow) * 100) or vector(0)", "instant": false, "refId": "A" }],
+      "title": "DB Pool Util %",
+      "type": "stat"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 85 }] },
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 18, "y": 1 },
+      "id": 7,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "(app_memory_rss_bytes / app_memory_limit_bytes * 100) or vector(0)", "instant": false, "refId": "A" }],
+      "title": "RSS % of Limit",
+      "type": "stat"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 3 }] },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 21, "y": 1 },
+      "id": 8,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "pluginVersion": "11.2.0",
+      "targets": [{ "expr": "app_restarts_total or vector(0)", "instant": false, "refId": "A" }],
+      "title": "Restarts / Uptime",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+      "id": 101,
+      "title": "Row 1 — RED (Rate, Errors, Duration)",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 5 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "sum by(endpoint)(rate(http_requests_total{endpoint=~\"$endpoint\"}[1m]))", "legendFormat": "{{endpoint}}", "refId": "A" }],
+      "title": "Throughput by Endpoint (Stacked)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 5 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "expr": "sum by(endpoint, cause)(rate(http_errors_total{endpoint=~\"$endpoint\"}[1m]))", "legendFormat": "{{endpoint}} ({{cause}})", "refId": "A" }],
+      "title": "Errors by Endpoint & Cause (Root Cause)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 5 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by(le, endpoint)(rate(http_request_duration_seconds_bucket{endpoint=~\"$endpoint\"}[5m])))", "legendFormat": "p50 - {{endpoint}}", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum by(le, endpoint)(rate(http_request_duration_seconds_bucket{endpoint=~\"$endpoint\"}[5m])))", "legendFormat": "p95 - {{endpoint}}", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum by(le, endpoint)(rate(http_request_duration_seconds_bucket{endpoint=~\"$endpoint\"}[5m])))", "legendFormat": "p99 - {{endpoint}}", "refId": "C" }
+      ],
+      "title": "p50 / p95 / p99 Latency per Endpoint",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "id": 13,
+      "targets": [{ "expr": "sum by(le)(rate(http_request_duration_seconds_bucket[5m]))", "format": "heatmap", "legendFormat": "{{le}}", "refId": "A" }],
+      "title": "Request Duration Heatmap",
+      "type": "heatmap"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "id": 14,
+      "targets": [{ "expr": "topk(10, histogram_quantile(0.99, sum by(le, endpoint)(rate(http_request_duration_seconds_bucket[5m]))))", "format": "table", "instant": true, "refId": "A" }],
+      "title": "Slowest Endpoints (Top 10 p99)",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
+      "id": 102,
+      "title": "Row 2 — System & Runtime",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 22 },
+      "id": 20,
+      "targets": [{ "expr": "app_cpu_percent", "legendFormat": "CPU %", "refId": "A" }],
+      "title": "Process CPU %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 22 },
+      "id": 21,
+      "targets": [
+        { "expr": "app_memory_rss_bytes", "legendFormat": "RSS Bytes", "refId": "A" },
+        { "expr": "app_memory_limit_bytes", "legendFormat": "Memory Limit", "refId": "B" }
+      ],
+      "title": "Memory RSS vs Container Limit",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 22 },
+      "id": 22,
+      "targets": [{ "expr": "event_loop_lag_seconds", "legendFormat": "Lag (s)", "refId": "A" }],
+      "title": "Asyncio Event Loop Lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 22 },
+      "id": 23,
+      "targets": [
+        { "expr": "threadpool_tokens_total", "legendFormat": "Total Tokens", "refId": "A" },
+        { "expr": "threadpool_tokens_borrowed", "legendFormat": "Borrowed Tokens", "refId": "B" },
+        { "expr": "threadpool_waiting", "legendFormat": "Waiting Tasks", "refId": "C" }
+      ],
+      "title": "AnyIO Threadpool Concurrency",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+      "id": 103,
+      "title": "Row 3 — Database & Connection Pooling",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 31 },
+      "id": 30,
+      "targets": [
+        { "expr": "db_pool_size", "legendFormat": "Pool Size", "refId": "A" },
+        { "expr": "db_pool_checked_out", "legendFormat": "Checked Out", "refId": "B" },
+        { "expr": "db_pool_overflow", "legendFormat": "Overflow", "refId": "C" },
+        { "expr": "db_pool_checked_in", "legendFormat": "Checked In (Idle)", "refId": "D" }
+      ],
+      "title": "SQLAlchemy Pool Connections State",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 31 },
+      "id": 31,
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by(le)(rate(db_pool_wait_seconds_bucket[5m])))", "legendFormat": "Pool Checkout Wait (p95)", "refId": "A" },
+        { "expr": "rate(db_pool_timeouts_total[5m])", "legendFormat": "Pool Timeouts / sec", "refId": "B" }
+      ],
+      "title": "DB Pool Checkout Wait & Timeout Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 31 },
+      "id": 32,
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by(le, operation)(rate(db_query_duration_seconds_bucket[5m])))", "legendFormat": "p95 - {{operation}}", "refId": "A" }],
+      "title": "Query Latency (p95) by SQL Operation",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "id": 104,
+      "title": "Row 4 — Financial & Domain Services",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 40 },
+      "id": 40,
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by(le, function)(rate(compute_duration_seconds_bucket[5m])))", "legendFormat": "{{function}} p95", "refId": "A" }],
+      "title": "Compute Duration (p95) by Algorithm",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 40 },
+      "id": 41,
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by(le, provider)(rate(upstream_request_duration_seconds_bucket{provider=~\"$provider\"}[5m])))", "legendFormat": "{{provider}}", "refId": "A" }],
+      "title": "Upstream Latency (p95) by Provider",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 40 },
+      "id": 42,
+      "targets": [
+        { "expr": "sum(rate(http_errors_total{cause=~\"upstream.*\"}[5m])) / sum(rate(http_errors_total[5m]))", "legendFormat": "Upstream Blame Ratio", "refId": "A" },
+        { "expr": "market_data_staleness_seconds{provider=~\"$provider\"}", "legendFormat": "Staleness - {{provider}}", "refId": "B" },
+        { "expr": "queue_depth", "legendFormat": "Queue - {{queue}}", "refId": "C" }
+      ],
+      "title": "Blame Ratio, Staleness & Queue Depth",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 105,
+      "title": "Row 5 — Root Cause & Crash Signatures",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+      "id": 50,
+      "targets": [{ "expr": "topk(20, increase(crash_signature_total[$__range]))", "format": "table", "instant": true, "refId": "A" }],
+      "title": "Top Crash Signatures (Signature ID, Location & Count)",
+      "type": "table"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+      "id": 51,
+      "options": { "showLabels": false, "wrapLogMessage": true },
+      "targets": [{ "expr": "{app=\"sentinews\"} | json | level=~\"error|critical\"", "refId": "A" }],
+      "title": "Structured Crash Logs (Filtered by Signature)",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 57 },
+      "id": 106,
+      "title": "Row 6 — Load Test (k6 Virtual Users vs Performance)",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 58 },
+      "id": 60,
+      "targets": [
+        { "expr": "k6_vus or vector(0)", "legendFormat": "k6 Virtual Users", "refId": "A" },
+        { "expr": "sum(rate(http_requests_total[1m]))", "legendFormat": "Throughput (RPS)", "refId": "B" },
+        { "expr": "histogram_quantile(0.95, sum by(le)(rate(http_request_duration_seconds_bucket[1m])))", "legendFormat": "p95 Latency (s)", "refId": "C" },
+        { "expr": "(sum(rate(http_requests_total{status_class=\"5xx\"}[1m])) / sum(rate(http_requests_total[1m]))) * 100", "legendFormat": "Error %", "refId": "D" }
+      ],
+      "title": "k6 Load Test Overlay: VUs vs RPS vs Latency vs Errors",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["sentinews", "apm", "production"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "value": "Prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "value": "load-test" },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Environment",
+        "name": "env",
+        "options": [{ "selected": true, "text": "load-test", "value": "load-test" }, { "selected": false, "text": "production", "value": "production" }, { "selected": false, "text": "development", "value": "development" }],
+        "query": "load-test,production,development",
+        "type": "custom"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "value": "$__all" },
+        "datasource": "${DS_PROMETHEUS}",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Endpoint",
+        "multi": true,
+        "name": "endpoint",
+        "query": "label_values(http_requests_total, endpoint)",
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "value": "$__all" },
+        "datasource": "${DS_PROMETHEUS}",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Provider",
+        "multi": true,
+        "name": "provider",
+        "query": "label_values(upstream_requests_total, provider)",
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"] },
+  "timezone": "utc",
+  "title": "Sentinews Master APM Panel",
+  "uid": "sentinews-master-apm",
+  "version": 1
+}

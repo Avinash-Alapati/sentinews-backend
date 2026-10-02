@@ -1,0 +1,387 @@
+services:
+  # ============================================================================
+  # Data Stores (Profile: "core" / default) - Bound to Internal Network Only
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: sentinews-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinews}
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sentinews}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  # Fast in-memory cache with LRU eviction for market data and rate limiting
+  redis-cache:
+    image: redis:7-alpine
+    container_name: sentinews-redis-cache
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --loglevel warning
+    expose:
+      - "6379"
+    volumes:
+      - redis_cache_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 3s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  # Persistent message broker with AOF enabled and no eviction for Celery tasks
+  redis-broker:
+    image: redis:7-alpine
+    container_name: sentinews-redis-broker
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction --loglevel warning
+    expose:
+      - "6379"
+    volumes:
+      - redis_broker_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 3s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  # ============================================================================
+  # Application Services (Profile: "core" / default)
+  # ============================================================================
+  migration:
+    image: ${APP_IMAGE:-sentinews-backend:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinews-migration
+    command: ["migration"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-}
+      REDIS_URL: redis://redis-cache:6379/0
+      REDIS_BROKER_URL: redis://redis-broker:6379/0
+      SECRET_KEY: ${SECRET_KEY:-your_super_secret_jwt_key_here_change_in_production}
+      METRICS_TOKEN: ${METRICS_TOKEN:-sentinews_metrics_secret_token}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: "no"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  api:
+    image: ${APP_IMAGE:-sentinews-backend:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinews-api
+    command: ["api"]
+    expose:
+      - "8000"
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      REDIS_URL: redis://redis-cache:6379/0
+      REDIS_BROKER_URL: redis://redis-broker:6379/0
+      SECRET_KEY: ${SECRET_KEY:-your_super_secret_jwt_key_here_change_in_production}
+      METRICS_TOKEN: ${METRICS_TOKEN:-sentinews_metrics_secret_token}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:3002}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      FETCHER_MODE: ${FETCHER_MODE:-inprocess}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-1}
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+      SHUTDOWN_MARKER_FILE: /tmp/.sentinews_clean_shutdown
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  worker:
+    image: ${APP_IMAGE:-sentinews-backend:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinews-worker
+    command: ["worker"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      REDIS_URL: redis://redis-cache:6379/0
+      REDIS_BROKER_URL: redis://redis-broker:6379/0
+      SECRET_KEY: ${SECRET_KEY:-your_super_secret_jwt_key_here_change_in_production}
+      METRICS_TOKEN: ${METRICS_TOKEN:-sentinews_metrics_secret_token}
+      CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-2}
+      SHUTDOWN_MARKER_FILE: /tmp/.sentinews_clean_shutdown_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  beat:
+    image: ${APP_IMAGE:-sentinews-backend:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinews-beat
+    command: ["scheduler"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      REDIS_URL: redis://redis-cache:6379/0
+      REDIS_BROKER_URL: redis://redis-broker:6379/0
+      SECRET_KEY: ${SECRET_KEY:-your_super_secret_jwt_key_here_change_in_production}
+      METRICS_TOKEN: ${METRICS_TOKEN:-sentinews_metrics_secret_token}
+      SHUTDOWN_MARKER_FILE: /tmp/.sentinews_clean_shutdown_scheduler
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  # ============================================================================
+  # Edge Reverse Proxy (Profile: "edge" / production ingress)
+  # ============================================================================
+  caddy:
+    profiles: ["edge", "core"]
+    image: caddy:2-alpine
+    container_name: sentinews-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@sentinews.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  # ============================================================================
+  # Development Hot-Reload Service (Profile: "dev")
+  # ============================================================================
+  api-dev:
+    profiles: ["dev"]
+    image: ${APP_IMAGE:-sentinews-backend:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinews-api-dev
+    command: ["api-dev"]
+    ports:
+      - "8000:8000"
+      - "5432:5432"
+      - "6379:6379"
+    volumes:
+      - .:/app
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      SYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinews}
+      REDIS_URL: redis://redis-cache:6379/0
+      REDIS_BROKER_URL: redis://redis-broker:6379/0
+      SECRET_KEY: ${SECRET_KEY:-your_super_secret_jwt_key_here_change_in_production}
+      METRICS_TOKEN: ${METRICS_TOKEN:-sentinews_metrics_secret_token}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:3002}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      FETCHER_MODE: inprocess
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    networks:
+      - sentinews-internal
+
+  # ============================================================================
+  # Local Observability Stack (Profile: "obs" - Local diagnostic only)
+  # ============================================================================
+  prometheus:
+    profiles: ["obs"]
+    image: prom/prometheus:v2.54.1
+    container_name: sentinews-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  grafana:
+    profiles: ["obs"]
+    image: grafana/grafana:11.2.0
+    container_name: sentinews-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+  loki:
+    profiles: ["obs"]
+    image: grafana/loki:3.1.1
+    container_name: sentinews-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinews-internal
+
+# ==============================================================================
+# Volumes and Networks
+# ==============================================================================
+volumes:
+  postgres_data:
+  redis_cache_data:
+  redis_broker_data:
+  caddy_data:
+  caddy_config:
+  prometheus_data:
+  loki_data:
+
+networks:
+  sentinews-internal:
+    driver: bridge
+    internal: false
