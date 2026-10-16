@@ -2,9 +2,9 @@ name: Sentinews Backend CI (PostgreSQL 15 & Redis 7 Service Containers)
 
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
   pull_request:
-    branches: [main, dev]
+    branches: [master, main, dev]
 
 jobs:
   test-postgres-redis:

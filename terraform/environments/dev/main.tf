@@ -37,7 +37,7 @@ resource "random_id" "suffix" {
 }
 
 # ==============================================================================
-# 1. Minimal Networking (1 Public Subnet, No NAT Gateway = ~$32/month saved)
+# 1. Minimal Networking (1 Public Subnet)
 # ==============================================================================
 
 resource "aws_vpc" "main" {
@@ -191,7 +191,10 @@ resource "aws_iam_policy" "ec2_custom_policy" {
           "ssm:GetParameter",
           "ssm:GetParametersByPath"
         ]
-        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/sentinews/${var.environment}/*"
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:*:parameter/sentinews/${var.environment}",
+          "arn:aws:ssm:${var.aws_region}:*:parameter/sentinews/${var.environment}/*"
+        ]
       },
       {
         Sid    = "KMSDecryptSSMSecrets"

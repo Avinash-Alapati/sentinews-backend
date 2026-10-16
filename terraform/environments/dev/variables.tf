@@ -6,8 +6,8 @@ variable "environment" {
 
 variable "aws_region" {
   type        = string
-  default     = "ap-south-1"
-  description = "AWS Mumbai region"
+  default     = "ap-southeast-2"
+  description = "AWS Sydney region (allowed by account SCP)"
 }
 
 variable "instance_type" {
