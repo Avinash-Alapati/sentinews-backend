@@ -21,7 +21,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U sentinews -d sentinews_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -37,6 +37,7 @@ jobs:
           --health-retries 5
 
     env:
+      PYTHONPATH: .
       ENVIRONMENT: test
       SECRET_KEY: test_super_secure_jwt_secret_key_for_testing_only_12345
       METRICS_TOKEN: test_metrics_token_1234567890123456789
