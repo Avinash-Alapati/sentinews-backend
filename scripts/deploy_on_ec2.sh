@@ -41,14 +41,15 @@ docker compose --profile core run --rm migration
 # 4. Bring up core & edge services
 echo "[4/6] Bringing up application services with zero downtime..."
 docker compose --profile core --profile edge up -d --remove-orphans
+docker compose restart caddy
 
 # 5. Local Healthcheck Verification
 echo "[5/6] Verifying API container health (/healthz)..."
 HEALTHY=0
 for i in $(seq 1 15); do
   sleep 3
-  if curl -sf http://localhost:8000/healthz > /dev/null; then
-    echo "[SUCCESS] API is healthy and responding at http://localhost:8000/healthz (check ${i}/15)!"
+  if curl -sf http://localhost/healthz > /dev/null || curl -sf http://localhost:8000/healthz > /dev/null; then
+    echo "[SUCCESS] API is healthy and responding at http://localhost/healthz (check ${i}/15)!"
     HEALTHY=1
     break
   fi
