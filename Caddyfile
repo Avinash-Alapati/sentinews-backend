@@ -4,7 +4,36 @@
     admin off
 }
 
-# Public HTTP & HTTPS reverse proxy listener
+# 1. Plain HTTP reverse proxy listener on port 80 (serves direct IP traffic without HTTPS redirect)
+:80 {
+    # Limit max request body size to 5MB to prevent DoS
+    request_body {
+        max_size 5MB
+    }
+
+    # Block internal diagnostic and metrics endpoints from public access
+    @internal_blocked {
+        path /internal/*
+    }
+    respond @internal_blocked "Forbidden" 403
+
+    # Reverse proxy to FastAPI application container
+    handle {
+        reverse_proxy api:8000 {
+            # Standard trusted proxy headers
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+
+            # Enable immediate streaming for WebSockets and SSE
+            flush_interval -1
+        }
+    }
+}
+
+# 2. Public HTTPS reverse proxy listener with automatic TLS
 {$DOMAIN:localhost} {
     # Limit max request body size to 5MB to prevent DoS
     request_body {
