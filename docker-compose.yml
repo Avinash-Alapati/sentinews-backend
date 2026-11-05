@@ -327,6 +327,7 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./observability/secrets:/etc/prometheus/secrets:ro
       - prometheus_data:/prometheus
     restart: unless-stopped
     logging:
